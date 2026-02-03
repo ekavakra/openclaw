@@ -156,6 +156,10 @@ export function resolveConfiguredModelRef(params: {
   defaultModel: string;
 }): ModelRef {
   const rawModel = (() => {
+    const envModel = process.env.OPENCLAW_DEFAULT_MODEL?.trim();
+    if (envModel) {
+      return envModel;
+    }
     const raw = params.cfg.agents?.defaults?.model as { primary?: string } | string | undefined;
     if (typeof raw === "string") {
       return raw.trim();

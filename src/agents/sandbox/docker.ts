@@ -1,3 +1,4 @@
+import path from "node:path";
 import { spawn } from "node:child_process";
 import type { SandboxConfig, SandboxDockerConfig, SandboxWorkspaceAccess } from "./types.js";
 import { formatCliCommand } from "../../cli/command-format.js";
@@ -5,7 +6,12 @@ import { defaultRuntime } from "../../runtime.js";
 import { computeSandboxConfigHash } from "./config-hash.js";
 import { DEFAULT_SANDBOX_IMAGE, SANDBOX_AGENT_WORKSPACE_MOUNT } from "./constants.js";
 import { readRegistry, updateRegistry } from "./registry.js";
-import { resolveSandboxAgentId, resolveSandboxScopeKey, slugifySessionKey } from "./shared.js";
+import {
+  resolveSandboxAgentId,
+  resolveSandboxScopeKey,
+  slugifySessionKey,
+  translateToHostPath,
+} from "./shared.js";
 
 const HOT_CONTAINER_WINDOW_MS = 5 * 60 * 1000;
 
@@ -224,15 +230,14 @@ async function createSandboxContainer(params: {
     configHash: params.configHash,
   });
   args.push("--workdir", cfg.workdir);
+  const hostWorkspaceDir = translateToHostPath(workspaceDir);
   const mainMountSuffix =
     params.workspaceAccess === "ro" && workspaceDir === params.agentWorkspaceDir ? ":ro" : "";
-  args.push("-v", `${workspaceDir}:${cfg.workdir}${mainMountSuffix}`);
+  args.push("-v", `${hostWorkspaceDir}:${cfg.workdir}${mainMountSuffix}`);
   if (params.workspaceAccess !== "none" && workspaceDir !== params.agentWorkspaceDir) {
+    const hostAgentWorkspaceDir = translateToHostPath(params.agentWorkspaceDir);
     const agentMountSuffix = params.workspaceAccess === "ro" ? ":ro" : "";
-    args.push(
-      "-v",
-      `${params.agentWorkspaceDir}:${SANDBOX_AGENT_WORKSPACE_MOUNT}${agentMountSuffix}`,
-    );
+    args.push("-v", `${hostAgentWorkspaceDir}:${SANDBOX_AGENT_WORKSPACE_MOUNT}${agentMountSuffix}`);
   }
   args.push(cfg.image, "sleep", "infinity");
 

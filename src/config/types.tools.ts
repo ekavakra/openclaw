@@ -216,6 +216,7 @@ export type AgentToolsConfig = {
   sandbox?: {
     tools?: {
       allow?: string[];
+      alsoAllow?: string[];
       deny?: string[];
     };
   };
@@ -444,6 +445,7 @@ export type ToolsConfig = {
   sandbox?: {
     tools?: {
       allow?: string[];
+      alsoAllow?: string[];
       deny?: string[];
     };
   };

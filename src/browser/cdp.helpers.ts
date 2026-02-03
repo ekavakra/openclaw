@@ -30,9 +30,21 @@ export function isLoopbackHost(host: string) {
 
 export function getHeadersWithAuth(url: string, headers: Record<string, string> = {}) {
   const relayHeaders = getChromeExtensionRelayAuthHeaders(url);
-  const mergedHeaders = { ...relayHeaders, ...headers };
+  const mergedHeaders: Record<string, string> = { ...relayHeaders, ...headers };
   try {
     const parsed = new URL(url);
+
+    // Chromium and socat (in the sandbox) reject Host headers that aren't localhost or an IP.
+    // When communicating container-to-container, we must override the Host header.
+    if (!isLoopbackHost(parsed.hostname) && !/^\d+\.\d+\.\d+\.\d+$/.test(parsed.hostname)) {
+      const hasHostHeader = Object.keys(mergedHeaders).some(
+        (key) => key.toLowerCase() === "host",
+      );
+      if (!hasHostHeader) {
+        mergedHeaders["Host"] = "localhost";
+      }
+    }
+
     const hasAuthHeader = Object.keys(mergedHeaders).some(
       (key) => key.toLowerCase() === "authorization",
     );

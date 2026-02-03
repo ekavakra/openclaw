@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import type { SandboxBrowserContext, SandboxConfig } from "./types.js";
 import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../browser/bridge-server.js";
 import { type ResolvedBrowserConfig, resolveProfile } from "../../browser/config.js";
@@ -15,12 +16,17 @@ import {
   readDockerPort,
 } from "./docker.js";
 import { updateBrowserRegistry } from "./registry.js";
-import { slugifySessionKey } from "./shared.js";
+import { slugifySessionKey, translateToHostPath } from "./shared.js";
 import { isToolAllowed } from "./tool-policy.js";
 
-async function waitForSandboxCdp(params: { cdpPort: number; timeoutMs: number }): Promise<boolean> {
+async function waitForSandboxCdp(params: {
+  host?: string;
+  cdpPort: number;
+  timeoutMs: number;
+}): Promise<boolean> {
   const deadline = Date.now() + Math.max(0, params.timeoutMs);
-  const url = `http://127.0.0.1:${params.cdpPort}/json/version`;
+  const host = params.host || "127.0.0.1";
+  const url = `http://${host}:${params.cdpPort}/json/version`;
   while (Date.now() < deadline) {
     try {
       const ctrl = new AbortController();
@@ -46,31 +52,36 @@ function buildSandboxBrowserResolvedConfig(params: {
   cdpPort: number;
   headless: boolean;
   evaluateEnabled: boolean;
+  containerName?: string;
 }): ResolvedBrowserConfig {
-  const cdpHost = "127.0.0.1";
-  return {
-    enabled: true,
-    evaluateEnabled: params.evaluateEnabled,
-    controlPort: params.controlPort,
-    cdpProtocol: "http",
-    cdpHost,
-    cdpIsLoopback: true,
-    remoteCdpTimeoutMs: 1500,
-    remoteCdpHandshakeTimeoutMs: 3000,
-    color: DEFAULT_OPENCLAW_BROWSER_COLOR,
-    executablePath: undefined,
-    headless: params.headless,
-    noSandbox: false,
-    attachOnly: true,
-    defaultProfile: DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-    profiles: {
-      [DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME]: {
-        cdpPort: params.cdpPort,
-        color: DEFAULT_OPENCLAW_BROWSER_COLOR,
+    const cdpPort = params.cdpPort;
+    const isDocker = fs.existsSync("/.dockerenv") || process.env.OPENCLAW_DOCKER === "1";
+    const cdpHost = isDocker && params.containerName ? params.containerName : "127.0.0.1";
+
+    return {
+      enabled: true,
+      evaluateEnabled: params.evaluateEnabled,
+      controlPort: params.controlPort,
+      cdpProtocol: "http",
+      cdpHost,
+      cdpIsLoopback: !isDocker,
+      remoteCdpTimeoutMs: 1500,
+      remoteCdpHandshakeTimeoutMs: 3000,
+      color: DEFAULT_OPENCLAW_BROWSER_COLOR,
+      executablePath: undefined,
+      headless: params.headless,
+      noSandbox: false,
+      attachOnly: true,
+      defaultProfile: DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
+      profiles: {
+        [DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME]: {
+          cdpPort,
+          color: DEFAULT_OPENCLAW_BROWSER_COLOR,
+        },
       },
-    },
-  };
-}
+    };
+  }
+
 
 async function ensureSandboxBrowserImage(image: string) {
   const result = await execDocker(["image", "inspect", image], {
@@ -110,18 +121,19 @@ export async function ensureSandboxBrowser(params: {
       scopeKey: params.scopeKey,
       labels: { "openclaw.sandboxBrowser": "1" },
     });
+    if (params.cfg.workspaceAccess !== "none" && params.workspaceDir !== params.agentWorkspaceDir) {
+      const hostAgentWorkspaceDir = translateToHostPath(params.agentWorkspaceDir);
+      const agentMountSuffix = params.cfg.workspaceAccess === "ro" ? ":ro" : "";
+      args.push(
+        "-v",
+        `${hostAgentWorkspaceDir}:${SANDBOX_AGENT_WORKSPACE_MOUNT}${agentMountSuffix}`,
+      );
+    }
+    const hostWorkspaceDir = translateToHostPath(params.workspaceDir);
     const mainMountSuffix =
       params.cfg.workspaceAccess === "ro" && params.workspaceDir === params.agentWorkspaceDir
         ? ":ro"
         : "";
-    args.push("-v", `${params.workspaceDir}:${params.cfg.docker.workdir}${mainMountSuffix}`);
-    if (params.cfg.workspaceAccess !== "none" && params.workspaceDir !== params.agentWorkspaceDir) {
-      const agentMountSuffix = params.cfg.workspaceAccess === "ro" ? ":ro" : "";
-      args.push(
-        "-v",
-        `${params.agentWorkspaceDir}:${SANDBOX_AGENT_WORKSPACE_MOUNT}${agentMountSuffix}`,
-      );
-    }
     args.push("-p", `127.0.0.1::${params.cfg.browser.cdpPort}`);
     if (params.cfg.browser.enableNoVnc && !params.cfg.browser.headless) {
       args.push("-p", `127.0.0.1::${params.cfg.browser.noVncPort}`);
@@ -131,6 +143,7 @@ export async function ensureSandboxBrowser(params: {
     args.push("-e", `OPENCLAW_BROWSER_CDP_PORT=${params.cfg.browser.cdpPort}`);
     args.push("-e", `OPENCLAW_BROWSER_VNC_PORT=${params.cfg.browser.vncPort}`);
     args.push("-e", `OPENCLAW_BROWSER_NOVNC_PORT=${params.cfg.browser.noVncPort}`);
+    args.push("-v", `${hostWorkspaceDir}:${params.cfg.docker.workdir}${mainMountSuffix}`);
     args.push(params.cfg.browser.image);
     await execDocker(args);
     await execDocker(["start", containerName]);
@@ -139,9 +152,13 @@ export async function ensureSandboxBrowser(params: {
   }
 
   const mappedCdp = await readDockerPort(containerName, params.cfg.browser.cdpPort);
-  if (!mappedCdp) {
+  const isDocker = fs.existsSync("/.dockerenv") || process.env.OPENCLAW_DOCKER === "1";
+
+  if (!mappedCdp && !isDocker) {
     throw new Error(`Failed to resolve CDP port mapping for ${containerName}.`);
   }
+
+  const bridgeCdpPort = isDocker ? params.cfg.browser.cdpPort : mappedCdp!;
 
   const mappedNoVnc =
     params.cfg.browser.enableNoVnc && !params.cfg.browser.headless
@@ -153,7 +170,9 @@ export async function ensureSandboxBrowser(params: {
     ? resolveProfile(existing.bridge.state.resolved, DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME)
     : null;
   const shouldReuse =
-    existing && existing.containerName === containerName && existingProfile?.cdpPort === mappedCdp;
+    existing &&
+    existing.containerName === containerName &&
+    existingProfile?.cdpPort === bridgeCdpPort;
   if (existing && !shouldReuse) {
     await stopBrowserBridgeServer(existing.bridge.server).catch(() => undefined);
     BROWSER_BRIDGES.delete(params.scopeKey);
@@ -178,12 +197,14 @@ export async function ensureSandboxBrowser(params: {
             await execDocker(["start", containerName]);
           }
           const ok = await waitForSandboxCdp({
-            cdpPort: mappedCdp,
+            host: isDocker ? containerName : "127.0.0.1",
+            cdpPort: bridgeCdpPort,
             timeoutMs: params.cfg.browser.autoStartTimeoutMs,
           });
           if (!ok) {
+            const host = isDocker ? containerName : "127.0.0.1";
             throw new Error(
-              `Sandbox browser CDP did not become reachable on 127.0.0.1:${mappedCdp} within ${params.cfg.browser.autoStartTimeoutMs}ms.`,
+              `Sandbox browser CDP did not become reachable on ${host}:${bridgeCdpPort} within ${params.cfg.browser.autoStartTimeoutMs}ms.`,
             );
           }
         }
@@ -192,9 +213,10 @@ export async function ensureSandboxBrowser(params: {
     return await startBrowserBridgeServer({
       resolved: buildSandboxBrowserResolvedConfig({
         controlPort: 0,
-        cdpPort: mappedCdp,
+        cdpPort: bridgeCdpPort,
         headless: params.cfg.browser.headless,
         evaluateEnabled: params.evaluateEnabled ?? DEFAULT_BROWSER_EVALUATE_ENABLED,
+        containerName,
       }),
       onEnsureAttachTarget,
     });
@@ -215,7 +237,7 @@ export async function ensureSandboxBrowser(params: {
     createdAtMs: now,
     lastUsedAtMs: now,
     image: params.cfg.browser.image,
-    cdpPort: mappedCdp,
+    cdpPort: bridgeCdpPort,
     noVncPort: mappedNoVnc ?? undefined,
   });
 

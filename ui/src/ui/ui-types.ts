@@ -35,3 +35,10 @@ export type CronFormState = {
   timeoutSeconds: string;
   postToMainPrefix: string;
 };
+
+export type WorkspaceFile = {
+  name: string;
+  size: number;
+  mtime: number;
+  isDirectory?: boolean;
+};

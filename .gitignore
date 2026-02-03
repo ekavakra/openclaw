@@ -68,6 +68,10 @@ apps/ios/*.mobileprovision
 IDENTITY.md
 USER.md
 .tgz
+.env.local
+.local_state/
+check-catalog.mjs
+tsc_output.txt
 
 # local tooling
 .serena/

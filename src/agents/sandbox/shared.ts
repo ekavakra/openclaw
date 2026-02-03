@@ -15,6 +15,15 @@ export function slugifySessionKey(value: string) {
   return `${base}-${hash}`;
 }
 
+export function translateToHostPath(localPath: string) {
+  const hostRoot = process.env.OPENCLAW_SANDBOX_HOST_ROOT;
+  const internalRoot = process.env.OPENCLAW_SANDBOX_INTERNAL_ROOT || "/home/node/.openclaw/sandboxes";
+  if (hostRoot && localPath.startsWith(internalRoot)) {
+    return path.join(hostRoot, path.relative(internalRoot, localPath));
+  }
+  return localPath;
+}
+
 export function resolveSandboxWorkspaceDir(root: string, sessionKey: string) {
   const resolvedRoot = resolveUserPath(root);
   const slug = slugifySessionKey(sessionKey);

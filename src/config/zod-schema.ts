@@ -327,6 +327,7 @@ export const OpenClawSchema = z
           .object({
             mode: z.union([z.literal("token"), z.literal("password")]).optional(),
             token: z.string().optional(),
+            username: z.string().optional(),
             password: z.string().optional(),
             allowTailscale: z.boolean().optional(),
           })

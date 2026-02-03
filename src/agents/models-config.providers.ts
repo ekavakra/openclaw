@@ -65,8 +65,18 @@ const QWEN_PORTAL_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
-const OLLAMA_BASE_URL = "http://127.0.0.1:11434/v1";
-const OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
+function getOllamaApiBaseUrl(): string {
+  const host = process.env.OLLAMA_HOST?.trim();
+  if (host) {
+    return host.replace(/\/+$/, "");
+  }
+  return "http://127.0.0.1:11434";
+}
+
+function getOllamaBaseUrl(): string {
+  return `${getOllamaApiBaseUrl()}/v1`;
+}
+
 const OLLAMA_DEFAULT_CONTEXT_WINDOW = 128000;
 const OLLAMA_DEFAULT_MAX_TOKENS = 8192;
 const OLLAMA_DEFAULT_COST = {
@@ -97,7 +107,7 @@ async function discoverOllamaModels(): Promise<ModelDefinitionConfig[]> {
     return [];
   }
   try {
-    const response = await fetch(`${OLLAMA_API_BASE_URL}/api/tags`, {
+    const response = await fetch(`${getOllamaApiBaseUrl()}/api/tags`, {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
@@ -109,6 +119,7 @@ async function discoverOllamaModels(): Promise<ModelDefinitionConfig[]> {
       console.warn("No Ollama models found on local instance");
       return [];
     }
+    console.log(`Discovered ${data.models.length} models from Ollama`);
     return data.models.map((model) => {
       const modelId = model.name;
       const isReasoning =
@@ -388,7 +399,7 @@ async function buildVeniceProvider(): Promise<ProviderConfig> {
 async function buildOllamaProvider(): Promise<ProviderConfig> {
   const models = await discoverOllamaModels();
   return {
-    baseUrl: OLLAMA_BASE_URL,
+    baseUrl: getOllamaBaseUrl(),
     api: "openai-completions",
     models,
   };
@@ -453,12 +464,16 @@ export async function resolveImplicitProviders(params: {
     providers.xiaomi = { ...buildXiaomiProvider(), apiKey: xiaomiKey };
   }
 
-  // Ollama provider - only add if explicitly configured
+  // Ollama provider - add if key exists OR OLLAMA_HOST is set
   const ollamaKey =
     resolveEnvApiKeyVarName("ollama") ??
     resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
-  if (ollamaKey) {
-    providers.ollama = { ...(await buildOllamaProvider()), apiKey: ollamaKey };
+  const ollamaHost = process.env.OLLAMA_HOST?.trim();
+  if (ollamaKey || ollamaHost) {
+    providers.ollama = {
+      ...(await buildOllamaProvider()),
+      apiKey: ollamaKey || "ollama-no-auth",
+    };
   }
 
   return providers;

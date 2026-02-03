@@ -74,8 +74,10 @@ export function resolveSandboxToolPolicyForAgent(
 ): SandboxToolPolicyResolved {
   const agentConfig = cfg && agentId ? resolveAgentConfig(cfg, agentId) : undefined;
   const agentAllow = agentConfig?.tools?.sandbox?.tools?.allow;
+  const agentAlsoAllow = agentConfig?.tools?.sandbox?.tools?.alsoAllow;
   const agentDeny = agentConfig?.tools?.sandbox?.tools?.deny;
   const globalAllow = cfg?.tools?.sandbox?.tools?.allow;
+  const globalAlsoAllow = cfg?.tools?.sandbox?.tools?.alsoAllow;
   const globalDeny = cfg?.tools?.sandbox?.tools?.deny;
 
   const allowSource = Array.isArray(agentAllow)
@@ -119,8 +121,14 @@ export function resolveSandboxToolPolicyForAgent(
       ? globalAllow
       : [...DEFAULT_TOOL_ALLOW];
 
+  const alsoAllow = Array.isArray(agentAlsoAllow)
+    ? agentAlsoAllow
+    : Array.isArray(globalAlsoAllow)
+      ? globalAlsoAllow
+      : [];
+
   const expandedDeny = expandToolGroups(deny);
-  let expandedAllow = expandToolGroups(allow);
+  let expandedAllow = expandToolGroups([...allow, ...alsoAllow]);
 
   // `image` is essential for multimodal workflows; always include it in sandboxed
   // sessions unless explicitly denied.

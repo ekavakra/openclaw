@@ -70,6 +70,14 @@ import {
   resetToolStream as resetToolStreamInternal,
   type ToolStreamEntry,
 } from "./app-tool-stream";
+import {
+  deleteFromWorkspace as deleteFromWorkspaceInternal,
+  downloadFromWorkspace as downloadFromWorkspaceInternal,
+  editInWorkspace as editInWorkspaceInternal,
+  loadWorkspace as loadWorkspaceInternal,
+  saveInWorkspace as saveInWorkspaceInternal,
+  uploadToWorkspace as uploadToWorkspaceInternal,
+} from "./controllers/workspace";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity";
 import { loadSettings, type UiSettings } from "./storage";
@@ -99,9 +107,11 @@ function resolveOnboardingMode(): boolean {
 @customElement("openclaw-app")
 export class OpenClawApp extends LitElement {
   @state() settings: UiSettings = loadSettings();
+  @state() username = this.settings.username || "";
   @state() password = "";
   @state() tab: Tab = "chat";
   @state() onboarding = resolveOnboardingMode();
+  @state() authenticated = true;
   @state() connected = false;
   @state() theme: ThemeMode = this.settings.theme ?? "system";
   @state() themeResolved: ResolvedTheme = "dark";
@@ -246,6 +256,15 @@ export class OpenClawApp extends LitElement {
   @state() logsLimit = 500;
   @state() logsMaxBytes = 250_000;
   @state() logsAtBottom = true;
+
+  @state() workspaceFiles: WorkspaceFile[] = [];
+  @state() workspaceLoading = false;
+  @state() workspaceError: string | null = null;
+  @state() workspaceEditingFile: WorkspaceFile | null = null;
+  @state() workspaceEditingContent = "";
+  @state() workspaceSaving = false;
+  @state() workspaceCurrentPath = "";
+  @state() workspaceSearchQuery = "";
 
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;
@@ -445,6 +464,28 @@ export class OpenClawApp extends LitElement {
     this.pendingGatewayUrl = null;
   }
 
+  handleLogout() {
+    this.authenticated = false;
+    this.password = "";
+    this.lastError = null;
+    this.client?.stop();
+    this.client = null;
+
+    this.applySettings({ ...this.settings, token: "" });
+
+    import("./device-auth").then(({ clearDeviceAuthToken }) => {
+      import("./device-identity").then(({ loadOrCreateDeviceIdentity }) => {
+        loadOrCreateDeviceIdentity().then((identity) => {
+          clearDeviceAuthToken({ deviceId: identity.deviceId, role: "operator" });
+          // We don't necessarily need to reconnect immediately if we're showing the login view.
+          // But connecting ensures that if the gateway allows anonymous access (unlikely), 
+          // we show the right state. 
+          // However, for password auth, it's better to just wait for the user to click Connect.
+        });
+      });
+    });
+  }
+
   // Sidebar handlers for tool output viewing
   handleOpenSidebar(content: string) {
     if (this.sidebarCloseTimer != null) {
@@ -476,6 +517,39 @@ export class OpenClawApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
+  }
+
+  async handleWorkspaceLoad() {
+    await loadWorkspaceInternal(this);
+  }
+
+  async handleWorkspaceUpload(files: FileList) {
+    await uploadToWorkspaceInternal(this, files);
+  }
+
+  handleWorkspaceDownload(name: string) {
+    downloadFromWorkspaceInternal(this, name);
+  }
+
+  async handleWorkspaceDelete(name: string) {
+    await deleteFromWorkspaceInternal(this, name);
+  }
+
+  async handleWorkspaceEdit(file: WorkspaceFile) {
+    await editInWorkspaceInternal(this, file);
+  }
+
+  async handleWorkspaceSave() {
+    await saveInWorkspaceInternal(this);
+  }
+
+  handleWorkspaceEditCancel() {
+    this.workspaceEditingFile = null;
+    this.workspaceEditingContent = "";
+  }
+
+  handleWorkspaceEditContentChange(content: string) {
+    this.workspaceEditingContent = content;
   }
 
   render() {

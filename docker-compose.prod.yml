@@ -1,0 +1,75 @@
+# Production configuration for OpenClaw
+services:
+  openclaw-gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        OPENCLAW_DOCKER_APT_PACKAGES: "docker-ce-cli"
+    image: openclaw:prod
+    container_name: openclaw-gateway
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+      OPENCLAW_DOCKER: "1"
+      OPENCLAW_SANDBOX_DOCKER_NETWORK: openclaw-net
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_GATEWAY_USERNAME: ${OPENCLAW_GATEWAY_USERNAME}
+      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD}
+      OPENCLAW_DEFAULT_MODEL: ${OPENCLAW_DEFAULT_MODEL}
+      OPENCLAW_SANDBOX_IMAGE: ${OPENCLAW_SANDBOX_IMAGE:-openclaw-sandbox:prod}
+      OPENCLAW_SANDBOX_BROWSER_IMAGE: ${OPENCLAW_SANDBOX_BROWSER_IMAGE:-openclaw-sandbox-browser:prod}
+      # Ollama connectivity - use host IP or container name if in same network
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+    volumes:
+      - ./data/config:/home/node/.openclaw
+      - ./data/workspace:/home/node/.openclaw/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "18789:18789"
+      - "18790:18790"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - openclaw-net
+    group_add:
+      - ${DOCKER_GID:-1000}
+    init: true
+    restart: unless-stopped
+    command:
+      [
+        "node",
+        "dist/index.js",
+        "gateway",
+        "--bind",
+        "lan",
+        "--port",
+        "18789",
+        "--auth",
+        "password",
+      ]
+
+  # These services are placeholders to ensure images are built/loaded
+  openclaw-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: ${OPENCLAW_SANDBOX_IMAGE:-openclaw-sandbox:prod}
+    restart: "no"
+    networks:
+      - openclaw-net
+    command: ["sleep", "infinity"]
+
+  openclaw-sandbox-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox-browser
+    image: ${OPENCLAW_SANDBOX_BROWSER_IMAGE:-openclaw-sandbox-browser:prod}
+    restart: "no"
+    networks:
+      - openclaw-net
+    command: ["sleep", "infinity"]
+
+networks:
+  openclaw-net:
+    driver: bridge

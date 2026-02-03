@@ -55,11 +55,13 @@ import { renderDebug } from "./views/debug";
 import { renderExecApprovalPrompt } from "./views/exec-approval";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation";
 import { renderInstances } from "./views/instances";
+import { renderLogin } from "./views/login";
 import { renderLogs } from "./views/logs";
 import { renderNodes } from "./views/nodes";
 import { renderOverview } from "./views/overview";
 import { renderSessions } from "./views/sessions";
 import { renderSkills } from "./views/skills";
+import { renderWorkspace } from "./views/workspace";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -81,6 +83,26 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
 }
 
 export function renderApp(state: AppViewState) {
+  // We show the login screen if we're not authenticated AND the error suggests 
+  // that a password is required. Otherwise, we show the dashboard (which might 
+  // be in a disconnected state), allowing token-based users to reach Settings.
+  const lastError = state.lastError?.toLowerCase() || "";
+  const needsPassword = lastError.includes("password") || lastError.includes("username");
+
+  if (!state.authenticated && !state.connected && needsPassword) {
+    return renderLogin({
+      username: state.username,
+      password: state.password,
+      lastError: state.lastError,
+      onUsernameChange: (next) => {
+        state.username = next;
+        state.applySettings({ ...state.settings, username: next });
+      },
+      onPasswordChange: (next) => (state.password = next),
+      onLogin: () => state.connect(),
+    });
+  }
+
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
   const cronNext = state.cronStatus?.nextWakeAtMs ?? null;
@@ -168,6 +190,14 @@ export function renderApp(state: AppViewState) {
               <span class="nav-item__icon" aria-hidden="true">${icons.book}</span>
               <span class="nav-item__text">Docs</span>
             </a>
+            <button
+              class="nav-item"
+              @click=${() => state.handleLogout()}
+              title="Logout"
+            >
+              <span class="nav-item__icon" aria-hidden="true">${icons.logOut}</span>
+              <span class="nav-item__text">Logout</span>
+            </button>
           </div>
         </div>
       </aside>
@@ -551,6 +581,34 @@ export function renderApp(state: AppViewState) {
                 onCallParamsChange: (next) => (state.debugCallParams = next),
                 onRefresh: () => loadDebug(state),
                 onCall: () => callDebugMethod(state),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "workspace"
+            ? renderWorkspace({
+                files: state.workspaceFiles,
+                loading: state.workspaceLoading,
+                error: state.workspaceError,
+                editingFile: state.workspaceEditingFile,
+                editingContent: state.workspaceEditingContent,
+                saving: state.workspaceSaving,
+                currentPath: state.workspaceCurrentPath,
+                searchQuery: state.workspaceSearchQuery,
+                onRefresh: () => state.handleWorkspaceLoad(),
+                onUpload: (files) => state.handleWorkspaceUpload(files),
+                onDownload: (name) => state.handleWorkspaceDownload(name),
+                onDelete: (name) => state.handleWorkspaceDelete(name),
+                onEdit: (file) => state.handleWorkspaceEdit(file),
+                onSave: () => state.handleWorkspaceSave(),
+                onEditCancel: () => state.handleWorkspaceEditCancel(),
+                onEditContentChange: (content) => state.handleWorkspaceEditContentChange(content),
+                onPathChange: (path) => {
+                  state.workspaceCurrentPath = path;
+                  void state.handleWorkspaceLoad();
+                },
+                onSearchChange: (query) => (state.workspaceSearchQuery = query),
               })
             : nothing
         }

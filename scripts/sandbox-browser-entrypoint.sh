@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export DISPLAY=:1
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 export HOME=/tmp/openclaw-home
 export XDG_CONFIG_HOME="${HOME}/.config"
 export XDG_CACHE_HOME="${HOME}/.cache"
@@ -57,7 +58,7 @@ done
 
 socat \
   TCP-LISTEN:"${CDP_PORT}",fork,reuseaddr,bind=0.0.0.0 \
-  TCP:127.0.0.1:"${CHROME_CDP_PORT}" &
+  TCP:127.0.0.1:${CHROME_CDP_PORT} &
 
 if [[ "${ENABLE_NOVNC}" == "1" && "${HEADLESS}" != "1" ]]; then
   x11vnc -display :1 -rfbport "${VNC_PORT}" -shared -forever -nopw -localhost &

@@ -8,6 +8,7 @@ export type ResolvedGatewayAuthMode = "token" | "password";
 export type ResolvedGatewayAuth = {
   mode: ResolvedGatewayAuthMode;
   token?: string;
+  username?: string;
   password?: string;
   allowTailscale: boolean;
 };
@@ -21,6 +22,7 @@ export type GatewayAuthResult = {
 
 type ConnectAuth = {
   token?: string;
+  username?: string;
   password?: string;
 };
 
@@ -205,6 +207,11 @@ export function resolveGatewayAuth(params: {
   const env = params.env ?? process.env;
   const token =
     authConfig.token ?? env.OPENCLAW_GATEWAY_TOKEN ?? env.CLAWDBOT_GATEWAY_TOKEN ?? undefined;
+  const username =
+    authConfig.username ??
+    env.OPENCLAW_GATEWAY_USERNAME ??
+    env.CLAWDBOT_GATEWAY_USERNAME ??
+    undefined;
   const password =
     authConfig.password ??
     env.OPENCLAW_GATEWAY_PASSWORD ??
@@ -216,6 +223,7 @@ export function resolveGatewayAuth(params: {
   return {
     mode,
     token,
+    username,
     password,
     allowTailscale,
   };
@@ -275,6 +283,7 @@ export async function authorizeGatewayConnect(params: {
 
   if (auth.mode === "password") {
     const password = connectAuth?.password;
+    const username = connectAuth?.username;
     if (!auth.password) {
       return { ok: false, reason: "password_missing_config" };
     }
@@ -284,7 +293,10 @@ export async function authorizeGatewayConnect(params: {
     if (!safeEqual(password, auth.password)) {
       return { ok: false, reason: "password_mismatch" };
     }
-    return { ok: true, method: "password" };
+    if (auth.username && (!username || !safeEqual(username, auth.username))) {
+      return { ok: false, reason: "username_mismatch" };
+    }
+    return { ok: true, method: "password", user: username || "admin" };
   }
 
   return { ok: false, reason: "unauthorized" };

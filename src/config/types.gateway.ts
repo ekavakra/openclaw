@@ -79,6 +79,8 @@ export type GatewayAuthConfig = {
   mode?: GatewayAuthMode;
   /** Shared token for token mode (stored locally for CLI auth). */
   token?: string;
+  /** Default username for password mode. */
+  username?: string;
   /** Shared password for password mode (consider env instead). */
   password?: string;
   /** Allow Tailscale identity headers when serve mode is enabled. */

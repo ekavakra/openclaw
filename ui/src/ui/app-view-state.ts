@@ -29,9 +29,11 @@ import type { NostrProfileFormState } from "./views/channels.nostr-profile-form"
 
 export type AppViewState = {
   settings: UiSettings;
+  username: string;
   password: string;
   tab: Tab;
   onboarding: boolean;
+  authenticated: boolean;
   basePath: string;
   connected: boolean;
   theme: ThemeMode;
@@ -143,6 +145,14 @@ export type AppViewState = {
   logsLevelFilters: Record<LogLevel, boolean>;
   logsAutoFollow: boolean;
   logsTruncated: boolean;
+  workspaceFiles: import("./ui-types").WorkspaceFile[];
+  workspaceLoading: boolean;
+  workspaceError: string | null;
+  workspaceEditingFile: import("./ui-types").WorkspaceFile | null;
+  workspaceEditingContent: string;
+  workspaceSaving: boolean;
+  workspaceCurrentPath: string;
+  workspaceSearchQuery: string;
   client: GatewayBrowserClient | null;
   connect: () => void;
   setTab: (tab: Tab) => void;
@@ -203,4 +213,13 @@ export type AppViewState = {
   handleLogsLevelFilterToggle: (level: LogLevel) => void;
   handleLogsAutoFollowToggle: (next: boolean) => void;
   handleCallDebugMethod: (method: string, params: string) => Promise<void>;
+  handleLogout: () => void;
+  handleWorkspaceLoad: () => Promise<void>;
+  handleWorkspaceUpload: (files: FileList) => Promise<void>;
+  handleWorkspaceDownload: (name: string) => void;
+  handleWorkspaceDelete: (name: string) => Promise<void>;
+  handleWorkspaceEdit: (file: import("./ui-types").WorkspaceFile) => Promise<void>;
+  handleWorkspaceSave: () => Promise<void>;
+  handleWorkspaceEditCancel: () => void;
+  handleWorkspaceEditContentChange: (content: string) => void;
 };

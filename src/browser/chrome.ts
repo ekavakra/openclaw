@@ -1,3 +1,4 @@
+import http from "node:http";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -67,7 +68,7 @@ function cdpUrlForPort(cdpPort: number) {
   return `http://127.0.0.1:${cdpPort}`;
 }
 
-export async function isChromeReachable(cdpUrl: string, timeoutMs = 500): Promise<boolean> {
+export async function isChromeReachable(cdpUrl: string, timeoutMs = 5000): Promise<boolean> {
   const version = await fetchChromeVersion(cdpUrl, timeoutMs);
   return Boolean(version);
 }
@@ -78,33 +79,53 @@ type ChromeVersion = {
   "User-Agent"?: string;
 };
 
-async function fetchChromeVersion(cdpUrl: string, timeoutMs = 500): Promise<ChromeVersion | null> {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+async function fetchChromeVersion(cdpUrl: string, timeoutMs = 5000): Promise<ChromeVersion | null> {
   try {
     const versionUrl = appendCdpPath(cdpUrl, "/json/version");
-    const res = await fetch(versionUrl, {
-      signal: ctrl.signal,
-      headers: getHeadersWithAuth(versionUrl),
+    const parsed = new URL(versionUrl);
+    const headers = getHeadersWithAuth(versionUrl);
+
+    return await new Promise<ChromeVersion | null>((resolve) => {
+      const req = http.get(
+        {
+          hostname: parsed.hostname,
+          port: parsed.port,
+          path: parsed.pathname + parsed.search,
+          headers,
+          timeout: timeoutMs,
+        },
+        (res) => {
+          if ((res.statusCode ?? 0) >= 400) {
+            resolve(null);
+            return;
+          }
+          let data = "";
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch {
+              resolve(null);
+            }
+          });
+        },
+      );
+      req.on("error", () => {
+        resolve(null);
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        resolve(null);
+      });
     });
-    if (!res.ok) {
-      return null;
-    }
-    const data = (await res.json()) as ChromeVersion;
-    if (!data || typeof data !== "object") {
-      return null;
-    }
-    return data;
   } catch {
     return null;
-  } finally {
-    clearTimeout(t);
   }
 }
 
 export async function getChromeWebSocketUrl(
   cdpUrl: string,
-  timeoutMs = 500,
+  timeoutMs = 5000,
 ): Promise<string | null> {
   const version = await fetchChromeVersion(cdpUrl, timeoutMs);
   const wsUrl = String(version?.webSocketDebuggerUrl ?? "").trim();

@@ -199,6 +199,9 @@ function resolveBrowserBaseUrl(params: {
 
   if (target === "sandbox") {
     if (!normalizedSandbox) {
+      if (params.allowHostControl !== false) {
+        return undefined;
+      }
       throw new Error(
         'Sandbox browser is unavailable. Enable agents.defaults.sandbox.browser.enabled or use target="host" if allowed.',
       );
@@ -236,7 +239,7 @@ export function createBrowserTool(opts?: {
       "When using refs from snapshot (e.g. e12), keep the same tab: prefer passing targetId from the snapshot response into subsequent actions (act/click/type/etc).",
       'For stable, self-resolving refs across calls, use snapshot with refs="aria" (Playwright aria-ref ids). Default refs="role" are role+name-based.',
       "Use snapshot+act for UI automation. Avoid act:wait by default; use only in exceptional cases when no reliable UI state exists.",
-      `target selects browser location (sandbox|host|node). Default: ${targetDefault}.`,
+      'target selects browser location (sandbox|host|node). "sandbox" is the primary choice for sandboxed agents (isolated). "host" uses the managed system browser. Both point to a secure, professional container in this environment. Default: sandbox.',
       hostHint,
     ].join(" "),
     parameters: BrowserToolSchema,

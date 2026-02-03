@@ -63,7 +63,11 @@ export function resolveSandboxDockerConfig(params: {
     workdir: agentDocker?.workdir ?? globalDocker?.workdir ?? DEFAULT_SANDBOX_WORKDIR,
     readOnlyRoot: agentDocker?.readOnlyRoot ?? globalDocker?.readOnlyRoot ?? true,
     tmpfs: agentDocker?.tmpfs ?? globalDocker?.tmpfs ?? ["/tmp", "/var/tmp", "/run"],
-    network: agentDocker?.network ?? globalDocker?.network ?? "none",
+    network:
+      agentDocker?.network ??
+      globalDocker?.network ??
+      process.env.OPENCLAW_SANDBOX_DOCKER_NETWORK ??
+      "none",
     user: agentDocker?.user ?? globalDocker?.user,
     capDrop: agentDocker?.capDrop ?? globalDocker?.capDrop ?? ["ALL"],
     env,

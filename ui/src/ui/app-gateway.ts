@@ -25,9 +25,11 @@ import { GatewayBrowserClient } from "./gateway";
 
 type GatewayHost = {
   settings: UiSettings;
+  username: string;
   password: string;
   client: GatewayBrowserClient | null;
   connected: boolean;
+  authenticated: boolean;
   hello: GatewayHelloOk | null;
   lastError: string | null;
   onboarding?: boolean;
@@ -49,13 +51,14 @@ type GatewayHost = {
   refreshSessionsAfterChat: Set<string>;
   execApprovalQueue: ExecApprovalRequest[];
   execApprovalError: string | null;
-};
-
-type SessionDefaultsSnapshot = {
-  defaultAgentId?: string;
-  mainKey?: string;
-  mainSessionKey?: string;
-  scope?: string;
+  workspaceFiles: import("./ui-types").WorkspaceFile[];
+  workspaceCurrentPath: string;
+  workspaceSearchQuery: string;
+  workspaceLoading: boolean;
+  workspaceError: string | null;
+  workspaceEditingFile: import("./ui-types").WorkspaceFile | null;
+  workspaceEditingContent: string;
+  workspaceSaving: boolean;
 };
 
 function normalizeSessionKeyForDefaults(
@@ -121,13 +124,23 @@ export function connectGateway(host: GatewayHost) {
   host.client = new GatewayBrowserClient({
     url: host.settings.gatewayUrl,
     token: host.settings.token.trim() ? host.settings.token : undefined,
+    username: host.username.trim() ? host.username : undefined,
     password: host.password.trim() ? host.password : undefined,
     clientName: "openclaw-control-ui",
     mode: "webchat",
     onHello: (hello) => {
       host.connected = true;
+      host.authenticated = true;
       host.lastError = null;
       host.hello = hello;
+      if (hello?.auth?.deviceToken) {
+        host.password = "";
+        // Persist token for future sessions (persistent login)
+        applySettings(host as unknown as Parameters<typeof applySettings>[0], {
+          ...host.settings,
+          token: hello.auth.deviceToken,
+        });
+      }
       applySnapshot(host, hello);
       // Reset orphaned chat run state from before disconnect.
       // Any in-flight run's final event was lost during the disconnect window.
@@ -146,6 +159,10 @@ export function connectGateway(host: GatewayHost) {
       // Code 1012 = Service Restart (expected during config saves, don't show as error)
       if (code !== 1012) {
         host.lastError = `disconnected (${code}): ${reason || "no reason"}`;
+      }
+      // If unauthorized (1008 or 4008), drop back to login view
+      if (code === 1008 || code === 4008) {
+        host.authenticated = false;
       }
     },
     onEvent: (evt) => handleGatewayEvent(host, evt),

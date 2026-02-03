@@ -79,6 +79,7 @@ export function applySettingsFromUrl(host: SettingsHost) {
   }
   const params = new URLSearchParams(window.location.search);
   const tokenRaw = params.get("token");
+  const usernameRaw = params.get("username");
   const passwordRaw = params.get("password");
   const sessionRaw = params.get("session");
   const gatewayUrlRaw = params.get("gatewayUrl");
@@ -90,6 +91,15 @@ export function applySettingsFromUrl(host: SettingsHost) {
       applySettings(host, { ...host.settings, token });
     }
     params.delete("token");
+    shouldCleanUrl = true;
+  }
+
+  if (usernameRaw != null) {
+    const username = usernameRaw.trim();
+    if (username && username !== host.settings.username) {
+      applySettings(host, { ...host.settings, username });
+    }
+    params.delete("username");
     shouldCleanUrl = true;
   }
 
@@ -181,6 +191,9 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "cron") {
     await loadCron(host);
+  }
+  if (host.tab === "workspace") {
+    await (host as unknown as OpenClawApp).handleWorkspaceLoad();
   }
   if (host.tab === "skills") {
     await loadSkills(host as unknown as OpenClawApp);

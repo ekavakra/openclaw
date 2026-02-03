@@ -90,6 +90,8 @@
     "check": "pnpm tsgo && pnpm lint && pnpm format",
     "check:loc": "node --import tsx scripts/check-ts-max-loc.ts --max 500",
     "dev": "node scripts/run-node.mjs",
+    "docker:dev": "docker-compose --env-file .env.local -f docker-compose.local.yml up -d --build",
+    "docker:down": "docker-compose --env-file .env.local -f docker-compose.local.yml down",
     "docs:bin": "node scripts/build-docs-list.mjs",
     "docs:build": "cd docs && pnpm dlx --reporter append-only mint broken-links",
     "docs:dev": "cd docs && mint dev",

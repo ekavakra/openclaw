@@ -70,22 +70,27 @@ export function buildGatewayConnectionDetails(
       ? `${scheme}://${tailnetIPv4}:${localPort}`
       : `${scheme}://127.0.0.1:${localPort}`;
   const urlOverride =
-    typeof options.url === "string" && options.url.trim().length > 0
+    (typeof options.url === "string" && options.url.trim().length > 0
       ? options.url.trim()
-      : undefined;
+      : undefined) ||
+    process.env.OPENCLAW_GATEWAY_URL?.trim() ||
+    process.env.CLAWDBOT_GATEWAY_URL?.trim();
   const remoteUrl =
     typeof remote?.url === "string" && remote.url.trim().length > 0 ? remote.url.trim() : undefined;
   const remoteMisconfigured = isRemoteMode && !urlOverride && !remoteUrl;
   const url = urlOverride || remoteUrl || localUrl;
-  const urlSource = urlOverride
-    ? "cli --url"
-    : remoteUrl
-      ? "config gateway.remote.url"
-      : remoteMisconfigured
-        ? "missing gateway.remote.url (fallback local)"
-        : preferTailnet && tailnetIPv4
-          ? `local tailnet ${tailnetIPv4}`
-          : "local loopback";
+  const urlSource =
+    typeof options.url === "string" && options.url.trim().length > 0
+      ? "cli --url"
+      : process.env.OPENCLAW_GATEWAY_URL?.trim() || process.env.CLAWDBOT_GATEWAY_URL?.trim()
+        ? "env URL"
+        : remoteUrl
+          ? "config gateway.remote.url"
+          : remoteMisconfigured
+            ? "missing gateway.remote.url (fallback local)"
+            : preferTailnet && tailnetIPv4
+              ? `local tailnet ${tailnetIPv4}`
+              : "local loopback";
   const remoteFallbackNote = remoteMisconfigured
     ? "Warn: gateway.mode=remote but gateway.remote.url is missing; set gateway.remote.url or switch gateway.mode=local."
     : undefined;
